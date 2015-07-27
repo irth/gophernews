@@ -164,7 +164,7 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 				} else if item.Type == "comment" {
 					info := GopherItem{
 						Type:     InfoItem,
-						Title:    fmt.Sprintf("Author: %s, score: %d.", item.Author, item.Score)
+						Title:    fmt.Sprintf("Author: %s, score: %d.", item.Author, item.Score),
 						Addr:     *remoteaddr,
 						Port:     *remoteport,
 						Selector: fmt.Sprintf("item/%d", n),
@@ -191,7 +191,7 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 
 				for _, child_id := range item.Children {
 					child := GetItem(child_id, 300)
-					shorttext := strings.Replace(child.Text, "\t", " ", -1)
+					shorttext := strings.Replace(strings.Replace(child.Text, "\t", " ", -1), "\n", " ", -1)
 					if len(child.Text) > 68 {
 						shorttext = shorttext[:55] + "..."
 					}
