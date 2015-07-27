@@ -26,6 +26,7 @@ type HNItem struct {
 	Descendants int    `json:"descendants"`
 	ID          int    `json:"id"`
 	Children    []int  `json:"kids"`
+	Parent      int    `json:"parent"`
 	Score       int    `json:"score"`
 	Text        string `json:"text"`
 	Time        int    `json:"time"`
@@ -101,7 +102,7 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 					hnitem := GetItem(id, 300)
 					gopheritem := GopherItem{
 						Type:     DirectoryItem,
-						Title:    hnitem.Title,
+						Title:    fmt.Sprintf("[Score: %d] %s", hnitem.Score, hnitem.Title),
 						Selector: fmt.Sprintf("item/%d", hnitem.ID),
 						Addr:     *remoteaddr,
 						Port:     *remoteport,
@@ -131,26 +132,97 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 			} else {
 				item := GetItem(int(n), 300)
 				var menu []GopherItem
-				var link = GopherItem{
-					Type:     HTMLItem,
-					Title:    item.Title,
-					Addr:     *remoteaddr,
-					Port:     *remoteport,
-					Selector: fmt.Sprintf("URL:%s", item.URL),
+				if item.Type == "story" {
+					link := GopherItem{
+						Type:     HTMLItem,
+						Title:    item.Title,
+						Addr:     *remoteaddr,
+						Port:     *remoteport,
+						Selector: fmt.Sprintf("URL:%s", item.URL),
+					}
+					info := GopherItem{
+						Type:     InfoItem,
+						Title:    fmt.Sprintf("Author: %s, score: %d, %d comment(s).", item.Author, item.Score, item.Descendants),
+						Addr:     *remoteaddr,
+						Port:     *remoteport,
+						Selector: fmt.Sprintf("item/%d", n),
+					}
+
+					menu = append(menu, link)
+					menu = append(menu, info)
+
+					if len(item.Text) > 0 {
+						text := GopherItem{
+							Type:     HTMLItem,
+							Title:    "[Click here to see the text...]",
+							Addr:     *remoteaddr,
+							Port:     *remoteport,
+							Selector: fmt.Sprintf("text/%d", item.ID),
+						}
+						menu = append(menu, text)
+					}
+				} else if item.Type == "comment" {
+					info := GopherItem{
+						Type:     InfoItem,
+						Title:    fmt.Sprintf("Author: %s, score: %d, %d child comment(s).", item.Author, item.Score, item.Descendants),
+						Addr:     *remoteaddr,
+						Port:     *remoteport,
+						Selector: fmt.Sprintf("item/%d", n),
+					}
+					text := GopherItem{
+						Type:     HTMLItem,
+						Title:    "[Click here to see the comment...]",
+						Addr:     *remoteaddr,
+						Port:     *remoteport,
+						Selector: fmt.Sprintf("text/%d", item.ID),
+					}
+					parent := GopherItem{
+						Type:     DirectoryItem,
+						Title:    "[Click here to go to the parent...]",
+						Addr:     *remoteaddr,
+						Port:     *remoteport,
+						Selector: fmt.Sprintf("item/%d", item.Parent),
+					}
+
+					menu = append(menu, text)
+					menu = append(menu, info)
+					menu = append(menu, parent)
 				}
-				var info = GopherItem{
-					Type:     InfoItem,
-					Title:    fmt.Sprintf("Score: %d, %d comment(s).", item.Score, item.Descendants),
-					Addr:     *remoteaddr,
-					Port:     *remoteport,
-					Selector: fmt.Sprintf("item/%d", n),
+
+				for _, child_id := range item.Children {
+					child := GetItem(child_id, 300)
+					shorttext := strings.Replace(child.Text, "\t", " ", -1)
+					if len(child.Text) > 68 {
+						shorttext = shorttext[:55] + "..."
+					}
+					shorttext = fmt.Sprintf("[Score: %d] %s", child.Score, shorttext)
+					child_item := GopherItem{
+						Type:     DirectoryItem,
+						Title:    shorttext,
+						Addr:     *remoteaddr,
+						Port:     *remoteport,
+						Selector: fmt.Sprintf("item/%d", child.ID),
+					}
+					menu = append(menu, child_item)
 				}
-				menu = append(menu, link)
-				menu = append(menu, info)
+
 				WriteMenu(conn, menu)
 			}
 		}
 	} else if strings.HasPrefix(selector, "URL:") {
 		fmt.Fprintf(conn, "<meta http-equiv=\"refresh\" content=\"0; url=%s\"><a href=\"%s\">Click here if automatic redirect does not work.</a>", selector[4:], selector[4:])
+	} else if strings.HasPrefix(selector, "text/") {
+		n, err := strconv.ParseInt(selector[5:], 10, 32)
+		if err == nil {
+			if n < 0 {
+				fmt.Fprintf(conn, "Invalid item number.\r\n")
+			} else {
+				item := GetItem(int(n), 300)
+				fmt.Fprintln(conn, item.Text)
+			}
+		} else {
+			fmt.Fprintf(conn, "Invalid item number.\r\n")
+		}
 	}
+
 }
