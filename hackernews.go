@@ -164,7 +164,7 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 				} else if item.Type == "comment" {
 					info := GopherItem{
 						Type:     InfoItem,
-						Title:    fmt.Sprintf("Author: %s, score: %d, %d child comment(s).", item.Author, item.Score, item.Descendants),
+						Title:    fmt.Sprintf("Author: %s, score: %d.", item.Author, item.Score)
 						Addr:     *remoteaddr,
 						Port:     *remoteport,
 						Selector: fmt.Sprintf("item/%d", n),
