@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -30,6 +31,25 @@ type HNItem struct {
 	Title       string `json:"title"`
 	Type        string `json:"type"`
 	URL         string `json:"url"`
+	RequestTime int
+}
+
+var items_cache map[int]HNItem
+
+func GetItem(id int, lifespan int) HNItem {
+	if items_cache == nil {
+		items_cache = make(map[int]HNItem)
+	}
+	if item, ok := items_cache[id]; ok {
+		if int(time.Now().Unix())-item.RequestTime <= lifespan {
+			return item
+		}
+	}
+	var item HNItem
+	napping.Get(fmt.Sprintf("%s%d.json", item_url, id), nil, &item, nil)
+	item.RequestTime = int(time.Now().Unix())
+	items_cache[id] = item
+	return item
 }
 
 func GetItems(selector string) ([]GopherItem, error) { //GopherItem is defined in gopher.go
@@ -70,8 +90,7 @@ func GetItems(selector string) ([]GopherItem, error) { //GopherItem is defined i
 				}
 
 				for _, id := range item_ids[min : max+1] {
-					var hnitem HNItem
-					napping.Get(fmt.Sprintf("%s%d.json", item_url, id), nil, &hnitem, nil)
+					hnitem := GetItem(id, 300)
 					gopheritem := GopherItem{
 						Type:     DirectoryItem,
 						Title:    hnitem.Title,
