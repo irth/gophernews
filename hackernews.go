@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jmcvetta/napping"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -52,7 +53,14 @@ func GetItem(id int, lifespan int) HNItem {
 	return item
 }
 
-func GetItems(selector string) ([]GopherItem, error) { //GopherItem is defined in gopher.go
+func WriteMenu(conn net.Conn, items []GopherItem) {
+	for _, item := range items {
+		conn.Write(item.Bytes())
+	}
+	conn.Write([]byte(".\r\n"))
+}
+
+func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in gopher.go
 	log.Println(selector)
 	if strings.HasPrefix(selector, "page/") {
 		n, err := strconv.ParseInt(selector[5:], 10, 32)
@@ -60,17 +68,17 @@ func GetItems(selector string) ([]GopherItem, error) { //GopherItem is defined i
 			min := (n - 1) * 10
 			max := min + 9
 			if n < 1 {
-				return gopherError("Invalid page number."), nil
+				WriteMenu(conn, gopherError("Invalid page number."))
 			} else {
-
 				var item_ids []int
 				napping.Get(topstories, nil, &item_ids, nil)
 				if int(max) > len(item_ids) {
-					return gopherError("Invalid page number."), nil
+					WriteMenu(conn, gopherError("Invalid page number."))
+					return
 				}
 				var items []GopherItem
 				var header = GopherItem{
-					Type:     DirectoryItem,
+					Type:     InfoItem,
 					Addr:     *remoteaddr,
 					Port:     *remoteport,
 					Title:    fmt.Sprintf("*** GopherNews | PAGE %d | Data from Hacker News ***", n),
@@ -109,18 +117,40 @@ func GetItems(selector string) ([]GopherItem, error) { //GopherItem is defined i
 					Selector: fmt.Sprintf("page/%d", n+1),
 				}
 				items = append(items, next)
-				return items, nil
-
+				WriteMenu(conn, items)
+			}
+		} else {
+			WriteMenu(conn, gopherError("Invalid page number."))
+		}
+	} else if strings.HasPrefix(selector, "item/") {
+		n, err := strconv.ParseInt(selector[5:], 10, 32)
+		if err == nil {
+			if n < 0 {
+				WriteMenu(conn, gopherError("Invalid item number."))
+				return
+			} else {
+				item := GetItem(int(n), 300)
+				var menu []GopherItem
+				var link = GopherItem{
+					Type:     HTMLItem,
+					Title:    item.Title,
+					Addr:     *remoteaddr,
+					Port:     *remoteport,
+					Selector: fmt.Sprintf("URL:%s", item.URL),
+				}
+				var info = GopherItem{
+					Type:     InfoItem,
+					Title:    fmt.Sprintf("Score: %d, %d comment(s).", item.Score, item.Descendants),
+					Addr:     *remoteaddr,
+					Port:     *remoteport,
+					Selector: fmt.Sprintf("item/%d", n),
+				}
+				menu = append(menu, link)
+				menu = append(menu, info)
+				WriteMenu(conn, menu)
 			}
 		}
+	} else if strings.HasPrefix(selector, "URL:") {
+		fmt.Fprintf(conn, "<meta http-equiv=\"refresh\" content=\"0; url=%s\"><a href=\"%s\">Click here if automatic redirect does not work.</a>", selector[4:], selector[4:])
 	}
-	return []GopherItem{
-		GopherItem{
-			Type:     DirectoryItem,
-			Title:    "yay",
-			Selector: "page/-2",
-			Addr:     "localhost",
-			Port:     9876,
-		},
-	}, nil
 }

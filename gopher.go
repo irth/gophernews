@@ -14,6 +14,8 @@ const (
 	FileItem      GopherType = '0'
 	DirectoryItem GopherType = '1'
 	ErrorItem     GopherType = '3'
+	HTMLItem      GopherType = 'h'
+	InfoItem      GopherType = 'i'
 )
 
 type GopherItem struct {
@@ -40,27 +42,11 @@ func HandleConnection(conn net.Conn) {
 	line, _ = reader.ReadString('\n')
 	log.Printf(line)
 	line = strings.Trim(line, "\r\n ") // strip unnecessary characters
-	log.Printf("%s requested \"/%s\"", conn.RemoteAddr(), line)
+	log.Printf("%s \"/%s\"", conn.RemoteAddr(), line)
 
 	if line == "" { // empty line is like http request for /
 		line = "page/1"
 	}
 
-	items, err := GetItems(line) // defined in hackernews.go
-	if err != nil {
-		conn.Write(GopherItem{
-			Type:     ErrorItem,
-			Title:    err.Error(),
-			Selector: "",
-			Addr:     "",
-			Port:     0,
-		}.Bytes())
-	} else {
-		for _, item := range items {
-			conn.Write(item.Bytes())
-		}
-	}
-
-	// dot means bye in Gopher language
-	conn.Write([]byte(".\r\n"))
+	HandleRequest(conn, line) // defined in hackernews.go
 }
