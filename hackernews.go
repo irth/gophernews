@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/jmcvetta/napping"
 	"github.com/kennygrant/sanitize"
+	"html"
 	"log"
 	"net"
 	"strconv"
@@ -217,7 +218,7 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 
 				for _, child_id := range item.Children {
 					child := GetItem(child_id, *cache_time)
-					shorttext := strings.Replace(strings.Replace(sanitize.HTML(child.Text), "\t", " ", -1), "\n", " ", -1)
+					shorttext := strings.Replace(strings.Replace(html.UnescapeString(sanitize.HTML(child.Text)), "\t", " ", -1), "\n", " ", -1)
 					if len(shorttext) > 120 {
 						shorttext = shorttext[:117] + "..."
 					}
