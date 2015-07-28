@@ -1,9 +1,9 @@
 package main
 
 import (
-	_ "errors"
 	"fmt"
 	"github.com/jmcvetta/napping"
+	"github.com/kennygrant/sanitize"
 	"log"
 	"net"
 	"strconv"
@@ -33,6 +33,9 @@ type HNItem struct {
 	Title       string `json:"title"`
 	Type        string `json:"type"`
 	URL         string `json:"url"`
+	Deleted     bool   `json:"deleted"`
+	Dead        bool   `json:"dead"`
+	Parts       []int  `json:"parts"`
 	RequestTime int
 }
 
@@ -99,7 +102,7 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 				}
 
 				for _, id := range item_ids[min : max+1] {
-					hnitem := GetItem(id, 300)
+					hnitem := GetItem(id, *cache_time)
 					gopheritem := GopherItem{
 						Type:     DirectoryItem,
 						Title:    fmt.Sprintf("[Score: %d] %s", hnitem.Score, hnitem.Title),
@@ -130,26 +133,19 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 				WriteMenu(conn, gopherError("Invalid item number."))
 				return
 			} else {
-				item := GetItem(int(n), 300)
+				item := GetItem(int(n), *cache_time)
 				var menu []GopherItem
 				if item.Type == "story" {
-					link := GopherItem{
-						Type:     HTMLItem,
-						Title:    item.Title,
-						Addr:     *remoteaddr,
-						Port:     *remoteport,
-						Selector: fmt.Sprintf("URL:%s", item.URL),
+					if len(item.URL) > 0 {
+						link := GopherItem{
+							Type:     HTMLItem,
+							Title:    item.Title,
+							Addr:     *remoteaddr,
+							Port:     *remoteport,
+							Selector: fmt.Sprintf("URL:%s", item.URL),
+						}
+						menu = append(menu, link)
 					}
-					info := GopherItem{
-						Type:     InfoItem,
-						Title:    fmt.Sprintf("Author: %s, score: %d, %d comment(s).", item.Author, item.Score, item.Descendants),
-						Addr:     *remoteaddr,
-						Port:     *remoteport,
-						Selector: fmt.Sprintf("item/%d", n),
-					}
-
-					menu = append(menu, link)
-					menu = append(menu, info)
 
 					if len(item.Text) > 0 {
 						text := GopherItem{
@@ -161,21 +157,41 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 						}
 						menu = append(menu, text)
 					}
-				} else if item.Type == "comment" {
+
 					info := GopherItem{
 						Type:     InfoItem,
-						Title:    fmt.Sprintf("Author: %s, score: %d.", item.Author, item.Score),
+						Title:    fmt.Sprintf("Author: %s, score: %d, %d comment(s).", item.Author, item.Score, item.Descendants),
 						Addr:     *remoteaddr,
 						Port:     *remoteport,
 						Selector: fmt.Sprintf("item/%d", n),
 					}
+					menu = append(menu, info)
+				} else if item.Type == "comment" {
+					info := GopherItem{
+						Type:     InfoItem,
+						Title:    fmt.Sprintf("Author: %s.", item.Author),
+						Addr:     *remoteaddr,
+						Port:     *remoteport,
+						Selector: fmt.Sprintf("item/%d", n),
+					}
+
 					text := GopherItem{
 						Type:     HTMLItem,
-						Title:    "[Click here to see the comment...]",
+						Title:    "[Click here to see the text...]",
 						Addr:     *remoteaddr,
 						Port:     *remoteport,
 						Selector: fmt.Sprintf("text/%d", item.ID),
 					}
+
+					if item.Dead {
+						text.Title = "[dead]"
+						text.Type = InfoItem
+					}
+					if item.Deleted {
+						text.Title = "[deleted]"
+						text.Type = InfoItem
+					}
+
 					parent := GopherItem{
 						Type:     DirectoryItem,
 						Title:    "[Click here to go to the parent...]",
@@ -185,17 +201,33 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 					}
 
 					menu = append(menu, text)
-					menu = append(menu, info)
 					menu = append(menu, parent)
+					if !(item.Dead || item.Deleted) {
+						menu = append(menu, info)
+					}
 				}
 
+				menu = append(menu, GopherItem{
+					Type:     InfoItem,
+					Title:    "",
+					Addr:     *remoteaddr,
+					Port:     *remoteport,
+					Selector: fmt.Sprintf("item/%d", item.ID),
+				})
+
 				for _, child_id := range item.Children {
-					child := GetItem(child_id, 300)
-					shorttext := strings.Replace(strings.Replace(child.Text, "\t", " ", -1), "\n", " ", -1)
-					if len(child.Text) > 68 {
-						shorttext = shorttext[:55] + "..."
+					child := GetItem(child_id, *cache_time)
+					shorttext := strings.Replace(strings.Replace(sanitize.HTML(child.Text), "\t", " ", -1), "\n", " ", -1)
+					if len(shorttext) > 120 {
+						shorttext = shorttext[:117] + "..."
 					}
-					shorttext = fmt.Sprintf("[Score: %d] %s", child.Score, shorttext)
+					if child.Dead {
+						shorttext = "[dead]"
+					}
+					if child.Deleted {
+						shorttext = "[deleted]"
+					}
+
 					child_item := GopherItem{
 						Type:     DirectoryItem,
 						Title:    shorttext,
@@ -217,7 +249,7 @@ func HandleRequest(conn net.Conn, selector string) { //GopherItem is defined in 
 			if n < 0 {
 				fmt.Fprintf(conn, "Invalid item number.\r\n")
 			} else {
-				item := GetItem(int(n), 300)
+				item := GetItem(int(n), *cache_time)
 				fmt.Fprintln(conn, item.Text)
 			}
 		} else {
