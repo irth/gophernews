@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+
+// Gopher item type characters, as defined in RFC1436, 3.8  Item type characters
+// See: https://www.ietf.org/rfc/rfc1436.txt
 type GopherType rune
 
 const (
@@ -18,6 +21,8 @@ const (
 	InfoItem      GopherType = 'i'
 )
 
+
+//"<Type><Title>\t<Selector>\t<Addr>\t<Port>\r\n", as RFC1436 specified.
 type GopherItem struct {
 	Type     GopherType
 	Title    string
@@ -39,12 +44,11 @@ func HandleConnection(conn net.Conn) {
 
 	reader := bufio.NewReader(conn) // create a buffered reader for connection
 	var line string
-	line, _ = reader.ReadString('\n')
-	log.Printf(line)
-	line = strings.Trim(line, "\r\n ") // strip unnecessary characters
+	line, _ = reader.ReadString('\n') // read until \n
+	line = strings.Trim(line, "\r\n ") // strip \r and \n, because Gopher standard specifies that lines will end with \r\n
 	log.Printf("%s \"/%s\"", conn.RemoteAddr(), line)
 
-	if line == "" { // empty line is like http request for /
+	if line == "" { // empty line is like http request for /, so let's show the first page
 		line = "page/1"
 	}
 
