@@ -2,6 +2,8 @@
 
 A proxy that allows you to browse Hacker News using your favourite Gopher client, written in Go!
 
+![Screenshot](./screen.png)
+
 # Usage
 
     go get github.com/irth/gophernews
